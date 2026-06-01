@@ -29,7 +29,7 @@ db.exec(`
         type TEXT NOT NULL,
         text TEXT NOT NULL,
         options TEXT NOT NULL, -- Stored as JSON string
-        correctAnswer INTEGER NOT NULL,
+        correctAnswer TEXT NOT NULL,
         points INTEGER DEFAULT 1,
         FOREIGN KEY (quizId) REFERENCES quizzes(id) ON DELETE CASCADE
     );

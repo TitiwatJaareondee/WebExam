@@ -168,14 +168,36 @@ const Views = {
         const q = state.editingQuiz;
         return `
             <h1>${q.id.startsWith('q-') ? 'สร้างควิซ' : 'แก้ไขควิซ'}</h1>
-            <div class="card"><div class="form-group"><label>ชื่อควิซ</label><input type="text" id="editTitle" value="${q.title}"></div><div class="form-group"><label>รายละเอียด</label><textarea id="editDesc">${q.description}</textarea></div><div class="form-group" style="max-width:150px;"><label>เวลา (นาที)</label><input type="number" id="editTime" value="${q.timeLimit}"></div></div>
-            <div style="display:flex; justify-content:space-between; margin-bottom:16px;"><h3>คำถาม (${q.questions.length})</h3><button class="btn btn-secondary btn-sm" onclick="addQuestionToEdit()">➕ เพิ่มข้อ</button></div>
+            <div class="card">
+                <div class="form-group"><label>ชื่อควิซ</label><input type="text" id="editTitle" value="${q.title}"></div>
+                <div class="form-group"><label>รายละเอียด</label><textarea id="editDesc">${q.description}</textarea></div>
+                <div class="form-group" style="max-width:150px;"><label>เวลา (นาที)</label><input type="number" id="editTime" value="${q.timeLimit}"></div>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom:16px;">
+                <h3>คำถาม (${q.questions.length})</h3>
+                <button class="btn btn-secondary btn-sm" onclick="addQuestionToEdit()">➕ เพิ่มข้อ</button>
+            </div>
             <div id="q-list">${q.questions.map((qn, i) => `
                 <div class="card" style="background:#fff; border-left:3px solid #000;">
-                    <div style="display:flex; justify-content:space-between;"><strong>ข้อที่ ${i+1}</strong><button class="btn btn-danger btn-sm" onclick="removeQuestion(${i})">ลบ</button></div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <strong>ข้อที่ ${i+1}</strong>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <select onchange="updateQType(${i}, this.value)" style="padding:4px; border-radius:4px;">
+                                <option value="mcq" ${qn.type==='mcq'?'selected':''}>ปรนัย (4 ตัวเลือก)</option>
+                                <option value="tf" ${qn.type==='tf'?'selected':''}>ถูก-ผิด</option>
+                                <option value="subjective" ${qn.type==='subjective'?'selected':''}>อัตนัย (ตอบสั้น)</option>
+                                <option value="long_answer" ${qn.type==='long_answer'?'selected':''}>อัตนัย (ตอบยาว)</option>
+                            </select>
+                            <button class="btn btn-danger btn-sm" onclick="removeQuestion(${i})">ลบ</button>
+                        </div>
+                    </div>
                     <div class="form-group"><label>โจทย์</label><input type="text" value="${qn.text}" onchange="updateQData(${i},'text',this.value)"></div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-                        ${[0,1,2,3].map(j => `<div style="display:flex; gap:8px;"><input type="radio" name="c-${i}" ${qn.correctAnswer===j?'checked':''} onclick="updateQData(${i},'correctAnswer',${j})"><input type="text" value="${qn.options[j]}" onchange="updateOption(${i},${j},this.value)"></div>`).join('')}
+                    <div id="q-options-${i}">
+                        ${renderEditorOptions(i, qn)}
+                    </div>
+                    <div class="form-group" style="margin-top:12px; max-width:100px;">
+                        <label>คะแนน</label>
+                        <input type="number" value="${qn.points || 1}" onchange="updateQData(${i},'points',parseInt(this.value))">
                     </div>
                 </div>
             `).join('')}</div>
@@ -208,12 +230,30 @@ const Views = {
     },
     result: () => {
         const r = state.lastResult, q = state.activeQuiz;
-        // In this version, we don't have global leaderboard easily without extra fetch, but we have the current result
         return `
             <div style="text-align:center;"><span class="caption">Complete</span><h1>คะแนนของคุณคือ ${r.score} / ${r.maxScore}</h1>
             <div style="max-width:480px; margin:48px auto; text-align:left;"><h3>เฉลย</h3>
-            ${q.questions.map((qn, i) => { const a = r.answers.find(x => x.questionId === qn.id), ok = qn.correctAnswer === a.answer;
-                return `<div style="margin-bottom:24px;"><p><strong>${i+1}. ${qn.text}</strong></p><div class="option ${ok?'correct-review':'wrong-review'}">${qn.options[a.answer]||'ไม่ได้ตอบ'}</div>${!ok?`<p style="font-size:12px; color:#555;">เฉลย: ${qn.options[qn.correctAnswer]}</p>`:''}</div>`;
+            ${q.questions.map((qn, i) => { 
+                const a = r.answers.find(x => x.questionId === qn.id);
+                const ok = a.isCorrect;
+                let studentAnsText = '';
+                let correctAnsText = '';
+
+                if (qn.type === 'mcq' || qn.type === 'tf') {
+                    studentAnsText = qn.options[a.answer] || 'ไม่ได้ตอบ';
+                    correctAnsText = qn.options[qn.correctAnswer];
+                } else {
+                    studentAnsText = a.answer || 'ไม่ได้ตอบ';
+                    correctAnsText = qn.correctAnswer;
+                }
+
+                return `
+                    <div style="margin-bottom:24px;">
+                        <p><strong>${i+1}. ${qn.text}</strong></p>
+                        <div class="option ${ok?'correct-review':'wrong-review'}">${studentAnsText}</div>
+                        ${!ok && qn.type !== 'long_answer' ? `<p style="font-size:12px; color:#555;">เฉลย: ${correctAnsText}</p>` : ''}
+                    </div>
+                `;
             }).join('')}</div><button class="btn btn-primary" onclick="navigate('student_dash')">Dashboard</button></div>
         `;
     }
@@ -291,18 +331,96 @@ async function deleteQuiz(id) {
         }
     } 
 }
-function addQuestionToEdit() { state.editingQuiz.questions.push({ id: 'qn-'+Date.now(), type: 'mcq', text: '', options: ['','','',''], correctAnswer: 0, points: 1 }); render(); }
+function addQuestionToEdit() { state.editingQuiz.questions.push({ id: 'qn-'+Date.now(), type: 'mcq', text: '', options: ['','','',''], correctAnswer: '0', points: 1 }); render(); }
 function removeQuestion(i) { state.editingQuiz.questions.splice(i, 1); render(); }
 function updateQData(i, k, v) { state.editingQuiz.questions[i][k] = v; }
 function updateOption(qi, oi, v) { state.editingQuiz.questions[qi].options[oi] = v; }
+
+function updateQType(i, type) {
+    const qn = state.editingQuiz.questions[i];
+    qn.type = type;
+    if (type === 'mcq') {
+        qn.options = ['', '', '', ''];
+        qn.correctAnswer = '0';
+    } else if (type === 'tf') {
+        qn.options = ['ถูก', 'ผิด'];
+        qn.correctAnswer = '0';
+    } else if (type === 'subjective') {
+        qn.options = [];
+        qn.correctAnswer = '';
+    } else if (type === 'long_answer') {
+        qn.options = [];
+        qn.correctAnswer = '';
+    }
+    render();
+}
+
+function renderEditorOptions(i, qn) {
+    if (qn.type === 'mcq') {
+        return `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                ${[0,1,2,3].map(j => `
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <input type="radio" name="c-${i}" ${qn.correctAnswer == j ? 'checked' : ''} onclick="updateQData(${i},'correctAnswer','${j}')">
+                        <input type="text" placeholder="ตัวเลือก ${j+1}" value="${qn.options[j] || ''}" onchange="updateOption(${i},${j},this.value)" style="flex:1;">
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    } else if (qn.type === 'tf') {
+        return `
+            <div style="display:flex; gap:24px;">
+                <label><input type="radio" name="c-${i}" ${qn.correctAnswer == '0' ? 'checked' : ''} onclick="updateQData(${i},'correctAnswer','0')"> ถูก</label>
+                <label><input type="radio" name="c-${i}" ${qn.correctAnswer == '1' ? 'checked' : ''} onclick="updateQData(${i},'correctAnswer','1')"> ผิด</label>
+            </div>
+        `;
+    } else if (qn.type === 'subjective') {
+        return `
+            <div class="form-group">
+                <label>คำตอบที่ถูกต้อง (สำหรับการตรวจอัตโนมัติ)</label>
+                <input type="text" value="${qn.correctAnswer}" onchange="updateQData(${i},'correctAnswer',this.value)" placeholder="เช่น กล้วย">
+            </div>
+        `;
+    } else if (qn.type === 'long_answer') {
+        return `<p style="font-size:12px; color:var(--text-secondary);">อัตนัยแบบตอบยาว จะไม่ถูกตรวจคะแนนอัตโนมัติ</p>`;
+    }
+    return '';
+}
+
 function startQuiz(id) {
     const q = state.quizzes.find(x => x.id === id); state.activeQuiz = q; state.activeQuestionIndex = 0; state.studentAnswers = {}; state.timeLeft = q.timeLimit * 60; state.startTime = Date.now();
     navigate('quiz-player'); state.timerInterval = setInterval(() => { state.timeLeft--; if (state.timeLeft <= 0) submitQuiz(); else { const el = document.getElementById('displayTimer'); if (el) el.innerText = formatTime(state.timeLeft); } }, 1000);
 }
+
+function checkCorrectness(qn, studentAns) {
+    if (qn.type === 'mcq' || qn.type === 'tf') {
+        return studentAns == qn.correctAnswer;
+    } else if (qn.type === 'subjective') {
+        if (!studentAns || !qn.correctAnswer) return false;
+        return studentAns.trim().toLowerCase() === qn.correctAnswer.trim().toLowerCase();
+    }
+    return false; // long_answer or unknown
+}
+
 async function submitQuiz() {
-    clearInterval(state.timerInterval); const d = Math.floor((Date.now() - state.startTime)/1000), q = state.activeQuiz; let s = 0;
-    const ans = q.questions.map(qn => { const a = state.studentAnswers[qn.id], ok = a === qn.correctAnswer; if (ok) s += qn.points; return { questionId: qn.id, answer: a, isCorrect: ok }; });
-    const res = { quizId: q.id, quizName: q.title, score: s, maxScore: q.questions.reduce((a,x) => a+x.points,0), timeTaken: formatTime(d), submittedAt: new Date().toISOString(), answers: ans };
+    clearInterval(state.timerInterval); 
+    const d = Math.floor((Date.now() - state.startTime)/1000), q = state.activeQuiz; 
+    let s = 0;
+    const ans = q.questions.map(qn => { 
+        const a = state.studentAnswers[qn.id];
+        const ok = checkCorrectness(qn, a); 
+        if (ok) s += qn.points; 
+        return { questionId: qn.id, answer: a, isCorrect: ok }; 
+    });
+    const res = { 
+        quizId: q.id, 
+        quizName: q.title, 
+        score: s, 
+        maxScore: q.questions.reduce((a,x) => a+x.points, 0), 
+        timeTaken: formatTime(d), 
+        submittedAt: new Date().toISOString(), 
+        answers: ans 
+    };
     try {
         await API.results.save(res);
         state.lastResult = res;
@@ -317,7 +435,33 @@ function exportResultsCSV() {
     const csv = rows.map(r => r.join(",")).join("\n"), blob = new Blob([csv], { type: 'text/csv' }), url = window.URL.createObjectURL(blob), a = document.createElement('a');
     a.href = url; a.download = `results_${Date.now()}.csv`; a.click();
 }
-function renderAnswerInput(qn) { const s = state.studentAnswers[qn.id]; return `<div style="display:flex; flex-direction:column;">${qn.options.map((o, i) => `<div class="option ${s===i?'selected':''}" onclick="state.studentAnswers['${qn.id}']= ${i}; render();"><span style="font-weight:700; margin-right:12px;">${String.fromCharCode(65+i)}</span> ${o}</div>`).join('')}</div>`; }
+
+function renderAnswerInput(qn) { 
+    const s = state.studentAnswers[qn.id]; 
+    if (qn.type === 'mcq') {
+        return `<div style="display:flex; flex-direction:column;">${qn.options.map((o, i) => `<div class="option ${s == i ? 'selected' : ''}" onclick="state.studentAnswers['${qn.id}']= ${i}; render();"><span style="font-weight:700; margin-right:12px;">${String.fromCharCode(65+i)}</span> ${o}</div>`).join('')}</div>`; 
+    } else if (qn.type === 'tf') {
+        return `
+            <div style="display:flex; gap:16px;">
+                <div class="option ${s == '0' ? 'selected' : ''}" style="flex:1; text-align:center;" onclick="state.studentAnswers['${qn.id}']= '0'; render();">ถูก</div>
+                <div class="option ${s == '1' ? 'selected' : ''}" style="flex:1; text-align:center;" onclick="state.studentAnswers['${qn.id}']= '1'; render();">ผิด</div>
+            </div>
+        `;
+    } else if (qn.type === 'subjective') {
+        return `
+            <div class="form-group">
+                <input type="text" class="input" placeholder="พิมพ์คำตอบของคุณที่นี่..." value="${s || ''}" onchange="state.studentAnswers['${qn.id}'] = this.value; render();">
+            </div>
+        `;
+    } else if (qn.type === 'long_answer') {
+        return `
+            <div class="form-group">
+                <textarea class="input" placeholder="พิมพ์คำตอบของคุณที่นี่..." style="min-height:150px;" onchange="state.studentAnswers['${qn.id}'] = this.value; render();">${s || ''}</textarea>
+            </div>
+        `;
+    }
+    return '';
+}
 function formatTime(s) { return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`; }
 function jumpToQuestion(i) { state.activeQuestionIndex = i; render(); }
 function nextQuestion() { if (state.activeQuestionIndex < state.activeQuiz.questions.length - 1) jumpToQuestion(state.activeQuestionIndex + 1); }
